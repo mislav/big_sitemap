@@ -3,57 +3,62 @@ require 'uri'
 require 'zlib'
 require 'builder'
 require 'extlib'
+require 'fileutils'
 
 class BigSitemap
+  DEFAULTS = {
+    :max_per_sitemap => 50000,
+    :batch_size => 1001,
+    :path => 'sitemaps',
+    
+    # opinionated
+    :ping_google => true,
+    :ping_yahoo => false, # needs :yahoo_app_id
+    :ping_msn => false,
+    :ping_ask => false,
+  }
+  
+  include FileUtils
+  
   def initialize(options)
-    document_root = options.delete(:document_root)
-
-    if document_root.nil?
-      if defined? RAILS_ROOT
-        document_root = "#{RAILS_ROOT}/public"
+    @options = DEFAULTS.merge options
+    
+    unless @options[:base_url]
+      raise ArgumentError, 'Base URL must be specified with the ":base_url" option'
+    end
+    
+    if @options[:batch_size] > @options[:max_per_sitemap]
+      raise ArgumentError, '":batch_size" must be less than ":max_per_sitemap"'
+    end
+    
+    @options[:document_root] ||= begin
+      if defined? Rails
+        "#{Rails.root}/public"
       elsif defined? Merb
-        document_root = "#{Merb.root}/public"
+        "#{Merb.root}/public"
       end
     end
+    
+    unless @options[:document_root]
+      raise ArgumentError, 'Document root must be specified with the ":document_root" option'
+    end
 
-    raise ArgumentError, 'Document root must be specified with the :document_root option' if document_root.nil?
-
-    @base_url        = options.delete(:base_url)
-    @max_per_sitemap = options.delete(:max_per_sitemap) || 50000
-    @batch_size      = options.delete(:batch_size) || 1001 # TODO: Set this to 1000 once DM offset 37000 bug is fixed
-    @web_path        = strip_leading_slash(options.delete(:path) || 'sitemaps')
-    @ping_google     = options[:ping_google].nil? ? true : options.delete(:ping_google)
-    @ping_yahoo      = options[:ping_yahoo].nil? ? true : options.delete(:ping_yahoo)
-    @yahoo_app_id    = options.delete(:yahoo_app_id)
-    @ping_msn        = options[:ping_msn].nil? ? true : options.delete(:ping_msn)
-    @ping_ask        = options[:ping_ask].nil? ? true : options.delete(:ping_ask)
-    @file_path       = "#{document_root}/#{@web_path}"
-    @sources         = []
-
-    raise ArgumentError, "Base URL must be specified with the :base_url option" if @base_url.nil?
-
-    raise(
-      ArgumentError,
-      'Batch size (:batch_size) must be less than or equal to maximum URLs per sitemap (:max_per_sitemap)'
-    ) if @batch_size > @max_per_sitemap
-
-    Dir.mkdir(@file_path) unless File.exists? @file_path
+    @file_path = "#{@options[:document_root]}/#{@options[:path]}"
+    @sources = []
   end
 
   def add(options)
-    raise ArgumentError, ':model and :path options must be provided' unless options[:model] && options[:path]
-    @sources << options.update(:path => strip_leading_slash(options[:path]))
-    self # Chainable
+    unless options[:model] and options[:path]
+      raise ArgumentError, 'please provide ":model" and ":path"'
+    end
+    
+    @sources << options.dup
+    return self
   end
 
   def clean
-    unless @file_path.nil?
-      Dir.foreach(@file_path) do |f|
-        f = "#{@file_path}/#{f}"
-        File.delete(f) if File.file?(f)
-      end
-    end
-    self # Chainable
+    rm_r @file_path
+    return self
   end
 
   def generate
@@ -127,10 +132,6 @@ class BigSitemap
   end
 
   private
-    def strip_leading_slash(str)
-      str.sub(/^\//, '')
-    end
-
     def pick_method(klass, candidates)
       method = nil
       candidates.each do |candidate|
