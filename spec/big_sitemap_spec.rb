@@ -1,4 +1,3 @@
-require 'stringio'
 require 'activesupport'
 
 unless defined? ActionController
@@ -35,20 +34,5 @@ describe BigSitemap do
   
   it "initializes URL options" do
     subject.default_url_options[:host].should == 'example.com'
-  end
-end
-
-describe BigSitemap::Builder do
-  subject {
-    @xml = described_class.new(:indent => 2)
-    @xml.target!
-  }
-  
-  it "should support nested tags without restricting to a block" do
-    should == ""
-    @xml.open_foo!(:a => 'b')
-    @xml.bar("Hello")
-    @xml.close_foo!
-    should == %(<foo a="b">\n  <bar>Hello</bar>\n</foo>\n)
   end
 end

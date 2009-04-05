@@ -1,11 +1,10 @@
 require 'uri'
-require 'zlib'
-require 'builder'
 require 'fileutils'
+require 'big_sitemap/builder'
 
 class BigSitemap
   DEFAULTS = {
-    :max_per_sitemap => 50000,
+    :max_per_sitemap => Builder::MAX_URLS,
     :batch_size => 1001,
     :gzip => true, # set false to inspect results
     
@@ -19,38 +18,8 @@ class BigSitemap
   
   include ActionController::UrlWriter
   
-  class Builder < Builder::XmlMarkup
-    # add support for:
-    #   xml.open_foo!(attrs)
-    #   xml.close_foo!
-    def method_missing(method, *args, &block)
-      if method.to_s =~ /^(open|close)_(.+)!$/
-        operation, name = $1, $2
-        name = "#{name}:#{args.shift}" if Symbol === args.first
-        
-        if 'open' == operation
-          _indent
-          _start_tag(name, args.first)
-          _newline
-          @level += 1
-        else
-          @level -= 1
-          _indent
-          _end_tag(name)
-          _newline
-        end
-      else
-        super
-      end
-    end
-  end
-  
   def initialize(options = {})
     @options = DEFAULTS.merge options
-    
-    if @options[:batch_size] > @options[:max_per_sitemap]
-      raise ArgumentError, '":batch_size" must be less than ":max_per_sitemap"'
-    end
     
     if @options[:url_options]
       default_url_options.update @options[:url_options]
@@ -66,11 +35,6 @@ class BigSitemap
     @root = @options[:document_root] || Rails.public_path
     @sources = []
     @sitemap_files = []
-    
-    # W3C format is the subset of ISO 8601
-    Time::DATE_FORMATS[:sitemap] = lambda { |time|
-      time.strftime "%Y-%m-%dT%H:%M:%S#{time.formatted_offset(true, 'Z')}"
-    }
   end
 
   def add(model, options = {})
@@ -85,15 +49,15 @@ class BigSitemap
 
   def generate
     for model, options in @sources
-      with_sitemap(model.name.tableize) do
+      with_sitemap(model.name.tableize) do |sitemap|
         find_options = options.dup
         changefreq = find_options.delete(:change_frequency) || 'weekly'
         find_options[:batch_size] ||= @options[:batch_size]
         timestamp_column = model.column_names.find { |col| TIMESTAMP_COLUMNS.include? col }
       
         model.find_each(find_options) do |record|
-          last_updated = record.read_attribute(timestamp_column)
-          add_url(polymorphic_url(record), last_updated, changefreq)
+          last_updated = timestamp_column && record.read_attribute(timestamp_column)
+          sitemap.add_url!(polymorphic_url(record), last_updated, changefreq)
         end
       end
     end
@@ -103,75 +67,29 @@ class BigSitemap
 
   private
   
-    def with_sitemap(name)
-      @sitemap = "sitemap_#{name}"
-      @parts = 0
-      @urls = 0
-      init_part
+    def with_sitemap(name, options = {})
+      options[:index] = name == 'index'
+      options[:filename] = "#{@root}/sitemap_#{name}"
+      options[:max_urls] = @options[:max_per_sitemap]
+      
+      unless options[:gzip] = @options[:gzip]
+        options[:indent] = 2
+      end
+      
+      sitemap = Builder.new(options)
+      
       begin
-        yield
+        yield sitemap
       ensure
-        close_part
+        sitemap.close!
+        @sitemap_files.concat sitemap.paths!
       end
-    end
-    
-    def init_part
-      part_filename = @sitemap
-      part_filename += "_#{@parts}" if @parts > 0
-      
-      @xml = Builder.new(:target => xml_open(part_filename), :indent => 2)
-      @xml.instruct!
-      @xml.open_urlset!(:xmlns => 'http://www.sitemaps.org/schemas/sitemap/0.9')
-    end
-    
-    def add_url(url, time, freq)
-      rotate_parts! if @options[:max_per_sitemap] == @urls
-      
-      @xml.url do
-        @xml.loc url
-        @xml.lastmod time.to_s(:sitemap)
-        @xml.changefreq freq
-      end
-      @urls += 1
-    end
-    
-    def close_part
-      @xml.close_urlset!
-      @xml.target!.close
-    end
-    
-    def rotate_parts!
-      close_part
-      @urls = 0
-      @parts += 1
-      init_part
-    end
-
-    def xml_open(filename)
-      filename += '.xml'
-      filename << '.gz' if @options[:gzip]
-      file = File.open("#{@root}/#{filename}", 'w+')
-      @sitemap_files << file.path
-      writer = @options[:gzip] ? Zlib::GzipWriter.new(file) : file
-      
-      if block_given?
-        yield writer 
-        writer.close
-      end
-      writer
     end
 
     def generate_sitemap_index
-      xml_open 'sitemap_index' do |file|
-        xml = Builder.new(:target => file, :indent => 2)
-        xml.instruct!
-        xml.sitemapindex(:xmlns => 'http://www.sitemaps.org/schemas/sitemap/0.9') do
-          for path in @sitemap_files[0..-2]
-            xml.sitemap do
-              xml.loc url_for_sitemap(path)
-              xml.lastmod File.stat(path).mtime.to_s(:sitemap)
-            end
-          end
+      with_sitemap 'index' do |sitemap|
+        for path in @sitemap_files
+          sitemap.add_url!(url_for_sitemap(path), File.stat(path).mtime)
         end
       end
     end
