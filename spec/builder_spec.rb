@@ -10,7 +10,7 @@ describe BigSitemap::Builder do
     end
   
     it "should add location" do
-      @xml.add_url!("http://example.com/mooslav", @time, "all the f-in time")
+      @xml.add_url!("http://example.com/mooslav", @time)
       @xml.close!
     
       result.should == strip(<<-XML)
@@ -19,10 +19,21 @@ describe BigSitemap::Builder do
           <url>
             <loc>http://example.com/mooslav</loc>
             <lastmod>#{@time_string}</lastmod>
-            <changefreq>all the f-in time</changefreq>
           </url>
         </urlset>
       XML
+    end
+    
+    it "should support frequency" do
+      @xml.add_url!("http://example.com/mooslav", nil, "all the f-in time")
+      @xml.close!
+      result.should include("<changefreq>all the f-in time</changefreq>")
+    end
+    
+    it "should support priority" do
+      @xml.add_url!("http://example.com/mooslav", nil, nil, 0.6)
+      @xml.close!
+      result.should include("<priority>0.6</priority>")
     end
   
     it "should rotate files when it reaches maximum number of URLs" do

@@ -52,12 +52,17 @@ class BigSitemap
       with_sitemap(model.name.tableize) do |sitemap|
         find_options = options.dup
         changefreq = find_options.delete(:change_frequency) || 'weekly'
+        priority = find_options.delete(:priority)
+        
         find_options[:batch_size] ||= @options[:batch_size]
         timestamp_column = model.column_names.find { |col| TIMESTAMP_COLUMNS.include? col }
       
         model.find_each(find_options) do |record|
           last_updated = timestamp_column && record.read_attribute(timestamp_column)
-          sitemap.add_url!(polymorphic_url(record), last_updated, changefreq)
+          freq = changefreq.is_a?(Proc) ? changefreq.call(record) : changefreq
+          pri = priority.is_a?(Proc) ? priority.call(record) : priority
+          
+          sitemap.add_url!(polymorphic_url(record), last_updated, freq, pri)
         end
       end
     end
