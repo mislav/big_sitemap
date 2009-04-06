@@ -2,6 +2,8 @@
 
 BigSitemap is a [Sitemap](http://sitemaps.org) generator suitable for Rails 2.3.2 applications with more than 50000 URLs.  It splits large sitemaps into multiple files, optionally gzipping them to minimize bandwidth usage and using batched queries (`find_each`) on your models to avoid running out of memory.
 
+BigSitemap is best run periodically through a Rake/Thor task. Your application environment should be loaded prior to generating sitemaps; BigSitemap uses your application database models and routing setup.
+
     sitemap = BigSitemap.new(
       :url_options => { :host => 'example.com' },
       :batch_size => 1001, :gzip => false
@@ -30,13 +32,15 @@ The URLs for each database record are generated with `polymorphic_url` helper fr
 
 BigSitemap options:
 
-* `:url_options` -- hash with `:host`, optionally `:port` and `:protocol`
-* `:max_per_sitemap` -- 50000, limit dictated by Google but can be less
-* `:batch_size` -- 1001
-* `:gzip` -- true
-* `:ping_google` -- true,
-* `:ping_yahoo` -- false, needs `:yahoo_app_id`
-* `:ping_msn` -- false
+* `:url_options` -- hash with `:host`, optionally `:port` and `:protocol`;
+* `:base_url` -- string alternative to `:url_options`, e.g. "https://example.com:8080/";
+* `:document_root` -- value of `Rails.public_path` by default (recommended not to change);
+* `:max_per_sitemap` -- 50000, limit dictated by Google but can be less;
+* `:batch_size` -- 1001;
+* `:gzip` -- true;
+* `:ping_google` -- true;
+* `:ping_yahoo` -- false, needs `:yahoo_app_id`;
+* `:ping_msn` -- false.
 
 To ping search engines, call `ping_search_engines` after you generated the sitemap:
 
