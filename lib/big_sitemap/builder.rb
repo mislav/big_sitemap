@@ -26,6 +26,10 @@ class BigSitemap
       @type == 'index'
     end
     
+    def video?
+      @type == 'video'
+    end
+    
     def add_url!(url, options = {})
       _rotate if @max_urls == @urls
       
@@ -34,6 +38,7 @@ class BigSitemap
         lastmod(options[:time].to_s(:sitemap)) if options[:time]
         changefreq(options[:frequency]) if options[:frequency]
         priority(options[:priority]) if options[:priority]
+        _build_video(options[:video]) if video?
       end
       @urls += 1
     end
@@ -72,6 +77,7 @@ class BigSitemap
       instruct!
       # define root element and namespaces
       attrs = {'xmlns' => 'http://www.sitemaps.org/schemas/sitemap/0.9'}
+      attrs['xmlns:video'] = 'http://www.google.com/schemas/sitemap-video/1.1' if video?
       _open_tag(index?? 'sitemapindex' : 'urlset', attrs)
     end
     
@@ -122,6 +128,34 @@ class BigSitemap
     def _close_document
       for name in @opened_tags.reverse
         _close_tag(name)
+      end
+    end
+    
+    def _build_video(data)
+      return if data.nil? or data.empty?
+      
+      video :video do
+        video :content_loc, data[:url] if data[:url]
+        video :player_loc, data[:player_url], :allow_embed => "yes" if data[:player_url]
+        video :thumbnail_loc, data[:thumbnail_url] if data[:thumbnail_url]
+        
+        video :title, data[:title] if data[:title]
+        video :description, data[:description] if data[:description]
+        video :rating, data[:rating] if data[:rating]
+        video :view_count, data[:views] if data[:views]
+        video :publication_date, data[:published_at].to_s(:sitemap) if data[:published_at]
+        video :duration, data[:length] if data[:length]
+        
+        if data[:tags]
+          for tag in data[:tags]
+            video :tag, tag
+          end
+        end
+        
+        unless data[:family_friendly].nil?
+          video :family_friendly, data[:family_friendly] ? 'yes' : 'no'
+        end
+        video :category, data[:category] if data[:category]
       end
     end
   end

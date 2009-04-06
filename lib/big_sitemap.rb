@@ -49,10 +49,13 @@ class BigSitemap
 
   def generate
     for model, options in @sources
-      with_sitemap(model.name.tableize) do |sitemap|
+      type = options[:video] && 'video'
+      
+      with_sitemap(model.name.tableize, :type => type) do |sitemap|
         find_options = options.dup
         changefreq = find_options.delete(:change_frequency) || 'weekly'
         priority = find_options.delete(:priority)
+        video_gen = find_options.delete(:video)
         
         find_options[:batch_size] ||= @options[:batch_size]
         timestamp_column = model.column_names.find { |col| TIMESTAMP_COLUMNS.include? col }
@@ -62,7 +65,8 @@ class BigSitemap
             polymorphic_url(record),
             :time => timestamp_column && record.read_attribute(timestamp_column),
             :frequency => changefreq.is_a?(Proc) ? changefreq.call(record) : changefreq,
-            :priority => priority.is_a?(Proc) ? priority.call(record) : priority
+            :priority => priority.is_a?(Proc) ? priority.call(record) : priority,
+            :video => video_gen && video_gen.call(record)
           )
         end
       end
@@ -94,7 +98,7 @@ class BigSitemap
     def generate_sitemap_index
       with_sitemap 'index', :type => 'index' do |sitemap|
         for path in @sitemap_files
-          sitemap.add_url!(url_for_sitemap(path), File.stat(path).mtime)
+          sitemap.add_url!(url_for_sitemap(path), :time => File.stat(path).mtime)
         end
       end
     end
