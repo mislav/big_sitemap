@@ -58,11 +58,12 @@ class BigSitemap
         timestamp_column = model.column_names.find { |col| TIMESTAMP_COLUMNS.include? col }
       
         model.find_each(find_options) do |record|
-          last_updated = timestamp_column && record.read_attribute(timestamp_column)
-          freq = changefreq.is_a?(Proc) ? changefreq.call(record) : changefreq
-          pri = priority.is_a?(Proc) ? priority.call(record) : priority
-          
-          sitemap.add_url!(polymorphic_url(record), last_updated, freq, pri)
+          sitemap.add_url!(
+            polymorphic_url(record),
+            :time => timestamp_column && record.read_attribute(timestamp_column),
+            :frequency => changefreq.is_a?(Proc) ? changefreq.call(record) : changefreq,
+            :priority => priority.is_a?(Proc) ? priority.call(record) : priority
+          )
         end
       end
     end

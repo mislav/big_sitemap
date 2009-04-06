@@ -26,14 +26,14 @@ class BigSitemap
       @type == 'index'
     end
     
-    def add_url!(url, time = nil, frequency = nil, priority = nil)
+    def add_url!(url, options = {})
       _rotate if @max_urls == @urls
       
       tag!(index?? 'sitemap' : 'url') do
-        loc url
-        lastmod(time.to_s(:sitemap)) unless time.nil?
-        changefreq(frequency) unless frequency.nil?
-        priority(priority) unless priority.nil?
+        loc(url)
+        lastmod(options[:time].to_s(:sitemap)) if options[:time]
+        changefreq(options[:frequency]) if options[:frequency]
+        priority(options[:priority]) if options[:priority]
       end
       @urls += 1
     end
